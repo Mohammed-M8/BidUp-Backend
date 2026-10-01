@@ -1,11 +1,11 @@
 # serializers/user.py
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 # Form Validations
 class UserRegistrationSchema(BaseModel):
     username: str  # User's unique name
-    email: str  # User's email address
+    email: EmailStr  # User's email address
     password: str  # Plain text password for user registration (will be hashed before saving)
 
 class UserLoginSchema(BaseModel):

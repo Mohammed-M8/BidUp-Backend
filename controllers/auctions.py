@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, List
 
 import cloudinary
 import cloudinary.uploader
+import config.cloudinary
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
@@ -31,19 +32,19 @@ def get_single(auction_id:int,db:Session=Depends(get_db)):
     return auction
 
 @router.post("",response_model=AuctionSchema,status_code=201)
-def create(form:Annotated[CreateAuctionSchema,Form()],image:Annotated[UploadFile,File()],user:UserModel=Depends(get_current_user),db:Session=Depends(get_db)):
+def create(form:CreateAuctionSchema=Depends(),user:UserModel=Depends(get_current_user),db:Session=Depends(get_db)):
     starting_price=form.starting_price
-    result=cloudinary.uploader.upload(image.file,folder="bidup/auctions")
+    result=cloudinary.uploader.upload(form.image.file,folder="bidup/auctions")
     image_url=result["secure_url"]
     image_public_id=result["public_id"]
-    new_auction=AuctionModel(**form.model_dump(),current_price=starting_price,image_url=image_url,image_public_id=image_public_id,seller_id=user.id)
+    new_auction=AuctionModel(**form.model_dump(exclude={"image"}),current_price=starting_price,image_url=image_url,image_public_id=image_public_id,seller_id=user.id)
     db.add(new_auction)
     db.commit()
     db.refresh(new_auction)
     return new_auction
 
 @router.put("/{auction_id}",response_model=AuctionSchema)
-def update(auction_id:int,update_form:Annotated[UpdateAuctionSchema,Form()],image:Annotated[UploadFile|None,File()]=None,user:UserModel=Depends(get_current_user),db:Session=Depends(get_db)):
+def update(auction_id:int,update_form:UpdateAuctionSchema=Depends(),user:UserModel=Depends(get_current_user),db:Session=Depends(get_db)):
     auction=db.query(AuctionModel).filter(AuctionModel.id==auction_id).first()
     if not auction:
         raise HTTPException(404,"Auction not found")
@@ -67,8 +68,9 @@ def update(auction_id:int,update_form:Annotated[UpdateAuctionSchema,Form()],imag
             "Can't edit an auction after bids have been placed. Cancel it and relist instead",
         )
 
-    update_data=update_form.model_dump(exclude_unset=True)
-
+    update_data = update_form.model_dump(
+        exclude_none=True,
+        exclude={"image"})
     if "end_date" in update_data and auction.bids:
         raise HTTPException(409, "Can't change the end date after bids have been placed")
 
@@ -79,20 +81,15 @@ def update(auction_id:int,update_form:Annotated[UpdateAuctionSchema,Form()],imag
     for key,value in update_data.items():
         setattr(auction,key,value)
 
-    if image:
-        old_public_id=auction.image_public_id
-        result=cloudinary.uploader.upload(image.file,folder="bidup/auctions")
-        auction.image_url=result["secure_url"]
-        auction.image_public_id=result["public_id"]
+    if update_form.image:
+        result = cloudinary.uploader.upload(
+            update_form.image.file,
+            public_id=auction.image_public_id,
+            overwrite=True)
 
         db.commit()
         db.refresh(auction)
 
-        if old_public_id:#type:ignore
-            try:
-                cloudinary.uploader.destroy(old_public_id)
-            except Exception:
-                pass
     else:
         db.commit()
         db.refresh(auction)
