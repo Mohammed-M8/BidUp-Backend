@@ -8,6 +8,7 @@ from fastapi import FastAPI
 
 # Controllers
 from controllers.users import router as UsersRouter
+from controllers.auctions import router as AuctionsRouter
 
 
 app = FastAPI()
@@ -27,6 +28,7 @@ app.add_middleware(
 )
 
 app.include_router(UsersRouter, prefix='/api')
+app.include_router(AuctionsRouter)
 
 @app.get('/health')
 def health_check():
