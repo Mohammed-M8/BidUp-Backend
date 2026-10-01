@@ -16,6 +16,8 @@ class UserModel(BaseModel):
     username = Column(String, unique=True)  # Each username must be unique
     email = Column(String, unique=True)  # Each email must be unique
     password = Column(String, nullable=True)
+    auctions = relationship("AuctionModel", back_populates="seller")
+    bids = relationship("BidModel", back_populates="bidder")
 
     def set_password(self, plain_txt_password: str):
         self.password = pwd_context.hash(plain_txt_password)
