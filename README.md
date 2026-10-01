@@ -1,12 +1,12 @@
-# CarBid - Live Car Auctions
+# BidUp - Live Auctions
 
-### A platform that allows users to put up an auction for a car and allows other users to bid for the duration of the auction.
+### A platform that allows users to put up an auction for a product and allows other users to bid for the duration of the auction.
 
   
 
 ## User Stories
 
-* As a User, i want to be able to put up a car of mine for auction
+* As a User, i want to be able to put up a product of mine for auction
 
 * As a User, i want to be able to set a starting price for each auction
 
