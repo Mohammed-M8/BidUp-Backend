@@ -4,7 +4,7 @@ from typing import Annotated, List
 import cloudinary
 import cloudinary.uploader
 import config.cloudinary
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -14,6 +14,7 @@ from models.bid import BidModel
 from models.user import UserModel
 from serializers.auction import AuctionSchema, CancelAuctionSchema, CreateAuctionSchema, UpdateAuctionSchema
 from utils.time import utcnow
+from websocket.manager import manager
 
 
 router=APIRouter(prefix="/api/auctions")
@@ -101,6 +102,7 @@ def update(auction_id:int,update_form:UpdateAuctionSchema=Depends(),user:UserMod
 def delete(
     auction_id: int,
     body: CancelAuctionSchema,
+    background_tasks:BackgroundTasks,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -125,8 +127,11 @@ def delete(
     auction.status = AuctionStatus.CANCELLED  # type: ignore
     auction.cancelled_at = utcnow()  # type: ignore
     auction.cancel_reason = body.reason  # type: ignore
+    background_tasks.add_task(manager.broadcast, auction_id, {"type": "auction_cancelled"})
+    background_tasks.add_task(manager.close_room, auction_id)
 
     db.commit()
+    
 
 
 
