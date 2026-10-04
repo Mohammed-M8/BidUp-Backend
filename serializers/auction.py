@@ -5,7 +5,10 @@ from fastapi import File, Form, UploadFile
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.auction import AuctionStatus
+from serializers.category import CategorySchema
+from serializers.user import SellerSchema
 from utils.time import utcnow
+
 
 
 class AuctionSchema(BaseModel):
@@ -19,10 +22,13 @@ class AuctionSchema(BaseModel):
     status: AuctionStatus
     image_url: str | None
     seller_id: int
+    seller: SellerSchema | None = None
     cancelled_at: datetime | None = None
     cancel_reason: str | None = None
     created_at: datetime
     updated_at: datetime
+    category_id: int | None = None
+    category: CategorySchema | None = None
 
     class Config:
             orm_mode = True
@@ -33,11 +39,14 @@ class CreateAuctionSchema(BaseModel):
     buy_now_price: Annotated[float | None, Form()] = Field(default=None, gt=0)
     starting_price: Annotated[float, Form()] = Field(gt=0)
     end_date: Annotated[datetime, Form()]
+    category_id: Annotated[int | None, Form()] = None
     image: Annotated[UploadFile, File()]
 
     @field_validator("end_date")
     @classmethod
     def end_date_in_future(cls, v):
+        if v is None:
+            return v
         if v.tzinfo is None:
             v = v.replace(tzinfo=timezone.utc)
         if v <= utcnow():
@@ -57,11 +66,14 @@ class UpdateAuctionSchema(BaseModel):
     product_description: Annotated[str|None,Form()] =None
     buy_now_price: Annotated[float|None,Form()] =None
     end_date: Annotated[datetime|None,Form()] =None
+    category_id: Annotated[int | None, Form()] = None
     image:Annotated[UploadFile|None,File()]=None
 
     @field_validator("end_date")
     @classmethod
     def end_date_in_future(cls, v):
+        if v is None:
+            return v
         if v.tzinfo is None:
             v = v.replace(tzinfo=timezone.utc)
         if v <= utcnow():
@@ -72,6 +84,20 @@ class UpdateAuctionSchema(BaseModel):
 
 class CancelAuctionSchema(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
+
+
+class AuctionSummarySchema(BaseModel):
+    id: int
+    product_name: str
+    image_url: str | None
+    current_price: float
+    end_date: datetime
+    status: AuctionStatus
+
+    class Config():
+        orm_mode=True
+
+
 
 
 

@@ -16,6 +16,7 @@ from controllers.auth import router as AuthRouter
 from controllers.users import router as UsersRouter
 from controllers.auctions import router as AuctionsRouter
 from controllers.bids import router as BidsRouter
+from controllers.categories import router as CategoriesRouter
 from controllers.websockets import router as WebsocketsRouter
 
 @asynccontextmanager
@@ -43,6 +44,7 @@ app.include_router(AuthRouter)
 app.include_router(UsersRouter)
 app.include_router(AuctionsRouter)
 app.include_router(BidsRouter)
+app.include_router(CategoriesRouter)
 app.include_router(WebsocketsRouter)
 
 @app.get('/health')
