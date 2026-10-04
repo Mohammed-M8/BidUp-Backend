@@ -5,6 +5,7 @@ from .base import BaseModel
 from . import user          # defines UserModel
 from . import auction
 from . import bid
+from . import category
 # add future models here as needed
 
 __all__ = ["BaseModel"]

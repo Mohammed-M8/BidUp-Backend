@@ -1,14 +1,14 @@
 from typing import List
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session,joinedload
 
 from database import get_db
 from dependencies.get_current_user import get_current_user
 from models.auction import AuctionModel,AuctionStatus
 from models.bid import BidModel
 from models.user import UserModel
-from serializers.bid import BidSchema, CreateBidSchema
+from serializers.bid import BidSchema, CreateBidSchema, UserBidSchema
 from utils.time import utcnow
 from websocket.manager import manager
 
@@ -26,7 +26,7 @@ def get_auction_bids(auction_id:int,user: UserModel = Depends(get_current_user),
     auction=db.query(AuctionModel).filter(AuctionModel.id==auction_id).first()
     if not auction:
         raise HTTPException(404,"Auction not found")
-    bids=db.query(BidModel).filter(BidModel.auction_id==auction_id).all()
+    bids=db.query(BidModel).filter(BidModel.auction_id==auction_id).options(joinedload(BidModel.bidder)).order_by(BidModel.price.desc()).all()
     return bids
 
 @router.get("/auctions/{auction_id}/winner", response_model=BidSchema)
@@ -43,7 +43,7 @@ def get_winning_bid(auction_id: int, db: Session = Depends(get_db)):
     winning_bid = (
         db.query(BidModel)
         .filter(BidModel.auction_id == auction_id)
-        .order_by(BidModel.price.desc(), BidModel.id.asc())
+        .order_by(BidModel.price.desc(), BidModel.id.asc()).options(joinedload(BidModel.bidder))
         .first()
     )
     if not winning_bid:
@@ -84,16 +84,16 @@ def create_bid(auction_id: int, form: CreateBidSchema,background_tasks:Backgroun
             {"type": "new_bid",
             "bid_id": bid.id,
             "price": price,
-            "bidder_id": bid.bidder_id,
+            "bidder": {"id": bid.bidder_id, "username": user.username},
             "ended": ended,})
-    if auction.status == AuctionStatus.ENDED:  # type: ignore
+    if ended:
         background_tasks.add_task(manager.close_room, auction_id)
 
     return bid
 
-@router.get("/users/{user_id}/bids", response_model=List[BidSchema])
+@router.get("/users/{user_id}/bids", response_model=List[UserBidSchema])
 def get_user_bids(user_id: int, user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)):
     if user_id != user.id:  # type: ignore
         raise HTTPException(403, "Cannot view other users' bids")
-    return db.query(BidModel).filter(BidModel.bidder_id == user_id).all()
+    return db.query(BidModel).filter(BidModel.bidder_id == user_id).options(joinedload(BidModel.auction)).order_by(BidModel.id.desc()).all()
 

@@ -5,12 +5,13 @@ import cloudinary
 import cloudinary.uploader
 import config.cloudinary
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session,joinedload
 
 from database import get_db
 from dependencies.get_current_user import get_current_user
 from models.auction import AuctionModel, AuctionStatus
 from models.bid import BidModel
+from models.category import CategoryModel
 from models.user import UserModel
 from serializers.auction import AuctionSchema, CancelAuctionSchema, CreateAuctionSchema, UpdateAuctionSchema
 from utils.time import utcnow
@@ -21,20 +22,30 @@ router=APIRouter(prefix="/api/auctions")
 CANCEL_LOCK_HOURS = 12
 
 
-@router.get("",response_model=List[AuctionSchema])
-def get_all(db:Session=Depends(get_db)):
-    auctions=db.query(AuctionModel).filter(AuctionModel.status==AuctionStatus.ACTIVE,AuctionModel.end_date>utcnow()).all()
-    return auctions
+@router.get("", response_model=List[AuctionSchema])
+def get_all(category_id: int | None = None, db: Session = Depends(get_db)):
+    query = (
+        db.query(AuctionModel)
+        .options(joinedload(AuctionModel.category))   # avoids one extra query per auction
+        .filter(AuctionModel.status == AuctionStatus.ACTIVE, AuctionModel.end_date > utcnow())
+    )
+    if category_id is not None:
+        query = query.filter(AuctionModel.category_id == category_id)
+    return query.all()
 
 @router.get("/{auction_id}",response_model=AuctionSchema)
 def get_single(auction_id:int,db:Session=Depends(get_db)):
-    auction=db.query(AuctionModel).filter(AuctionModel.id==auction_id).first()
+    auction=db.query(AuctionModel).filter(AuctionModel.id==auction_id).options(joinedload(AuctionModel.category),joinedload(AuctionModel.seller)).first()
     if not auction:
         raise HTTPException(404,"Auction not found")
     return auction
 
 @router.post("",response_model=AuctionSchema,status_code=201)
 def create(form:CreateAuctionSchema=Depends(),user:UserModel=Depends(get_current_user),db:Session=Depends(get_db)):
+    if form.category_id is not None:
+        exists = db.query(CategoryModel.id).filter(CategoryModel.id == form.category_id).first()
+        if not exists:
+            raise HTTPException(422, "Category does not exist")
     starting_price=form.starting_price
     result=cloudinary.uploader.upload(form.image.file,folder="bidup/auctions")
     image_url=result["secure_url"]
@@ -73,6 +84,11 @@ def update(auction_id:int,update_form:UpdateAuctionSchema=Depends(),user:UserMod
     update_data = update_form.model_dump(
         exclude_none=True,
         exclude={"image"})
+    category_id = update_data.get("category_id")
+    if category_id is not None:
+        exists = db.query(CategoryModel.id).filter(CategoryModel.id == category_id).first()
+        if not exists:
+            raise HTTPException(422, "Category does not exist")
     if "end_date" in update_data and auction.bids:
         raise HTTPException(409, "Can't change the end date after bids have been placed")
 

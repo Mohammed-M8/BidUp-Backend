@@ -24,3 +24,9 @@ class UserSchema(BaseModel):
 class UserTokenSchema(BaseModel):
     token: str
     message: str
+
+class SellerSchema(BaseModel):
+    id: int
+    username: str
+    class Config():
+        orm_mode=True
