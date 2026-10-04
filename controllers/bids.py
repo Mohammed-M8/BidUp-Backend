@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -10,6 +10,7 @@ from models.bid import BidModel
 from models.user import UserModel
 from serializers.bid import BidSchema, CreateBidSchema
 from utils.time import utcnow
+from websocket.manager import manager
 
 router=APIRouter(prefix="/api")
 
@@ -51,7 +52,7 @@ def get_winning_bid(auction_id: int, db: Session = Depends(get_db)):
     return winning_bid
 
 @router.post("/auctions/{auction_id}/bids", status_code=201, response_model=BidSchema)
-def create_bid(auction_id: int, form: CreateBidSchema,
+def create_bid(auction_id: int, form: CreateBidSchema,background_tasks:BackgroundTasks,
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db)):
     auction = (db.query(AuctionModel)
@@ -67,16 +68,27 @@ def create_bid(auction_id: int, form: CreateBidSchema,
        raise HTTPException(409, "Bid must be higher than the current price")
 
     price = form.price
+    ended = False
     if auction.buy_now_price is not None and price >= auction.buy_now_price:  # type: ignore
         price = auction.buy_now_price  # type: ignore
         auction.status = AuctionStatus.ENDED  # type: ignore
         auction.ended_at = utcnow()#type:ignore 
+        ended=True
 
     bid = BidModel(price=price, bidder_id=user.id, auction_id=auction_id)
     auction.current_price=price#type:ignore    
     db.add(bid)
     db.commit()
     db.refresh(bid)
+    background_tasks.add_task(manager.broadcast,auction_id,
+            {"type": "new_bid",
+            "bid_id": bid.id,
+            "price": price,
+            "bidder_id": bid.bidder_id,
+            "ended": ended,})
+    if auction.status == AuctionStatus.ENDED:  # type: ignore
+        background_tasks.add_task(manager.close_room, auction_id)
+
     return bid
 
 @router.get("/users/{user_id}/bids", response_model=List[BidSchema])

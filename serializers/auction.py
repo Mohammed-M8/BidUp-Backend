@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import File, Form, UploadFile
@@ -21,6 +21,8 @@ class AuctionSchema(BaseModel):
     seller_id: int
     cancelled_at: datetime | None = None
     cancel_reason: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
             orm_mode = True
@@ -35,10 +37,12 @@ class CreateAuctionSchema(BaseModel):
 
     @field_validator("end_date")
     @classmethod
-    def end_date_in_future(cls,v:datetime)->datetime:
-         if v<=utcnow():
-              raise ValueError("end_date must be in the future")
-         return v
+    def end_date_in_future(cls, v):
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        if v <= utcnow():
+            raise ValueError("end_date must be in the future")
+        return v
 
     @model_validator(mode="after")
     def check_prices(self):
@@ -57,10 +61,12 @@ class UpdateAuctionSchema(BaseModel):
 
     @field_validator("end_date")
     @classmethod
-    def end_date_in_future(cls,v:datetime|None)->datetime|None:
-         if v is not None and v<=utcnow():
-              raise ValueError("end_date must be in the future")
-         return v
+    def end_date_in_future(cls, v):
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        if v <= utcnow():
+            raise ValueError("end_date must be in the future")
+        return v
 
 
 
