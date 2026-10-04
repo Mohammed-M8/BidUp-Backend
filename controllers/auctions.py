@@ -13,6 +13,7 @@ from models.auction import AuctionModel, AuctionStatus
 from models.bid import BidModel
 from models.user import UserModel
 from serializers.auction import AuctionSchema, CancelAuctionSchema, CreateAuctionSchema, UpdateAuctionSchema
+from utils.time import utcnow
 
 
 router=APIRouter(prefix="/api/auctions")
@@ -21,7 +22,7 @@ CANCEL_LOCK_HOURS = 12
 
 @router.get("",response_model=List[AuctionSchema])
 def get_all(db:Session=Depends(get_db)):
-    auctions=db.query(AuctionModel).filter(AuctionModel.status==AuctionStatus.ACTIVE,AuctionModel.end_date>datetime.now()).all()
+    auctions=db.query(AuctionModel).filter(AuctionModel.status==AuctionStatus.ACTIVE,AuctionModel.end_date>utcnow()).all()
     return auctions
 
 @router.get("/{auction_id}",response_model=AuctionSchema)
@@ -55,7 +56,7 @@ def update(auction_id:int,update_form:UpdateAuctionSchema=Depends(),user:UserMod
     if auction.status!=AuctionStatus.ACTIVE:#type:ignore
         raise HTTPException(409,"Only active auctions can be edited")
 
-    if auction.end_date <= datetime.now():  # type: ignore
+    if auction.end_date <= utcnow():  # type: ignore
         raise HTTPException(409, "This auction has already ended")
 
     has_bids = (
@@ -114,7 +115,7 @@ def delete(
         raise HTTPException(409, "Auction is already ended or cancelled")
 
     if auction.bids:
-        time_left = auction.end_date - datetime.now()  # type: ignore
+        time_left = auction.end_date - utcnow()  # type: ignore
         if time_left < timedelta(hours=CANCEL_LOCK_HOURS):#type:ignore
             raise HTTPException(
                 409,
@@ -122,7 +123,7 @@ def delete(
             )
 
     auction.status = AuctionStatus.CANCELLED  # type: ignore
-    auction.cancelled_at = datetime.now()  # type: ignore
+    auction.cancelled_at = utcnow()  # type: ignore
     auction.cancel_reason = body.reason  # type: ignore
 
     db.commit()

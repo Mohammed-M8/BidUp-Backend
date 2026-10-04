@@ -19,7 +19,7 @@ def current_user(user: UserSchema = Depends(get_current_user)):
     return user
 
 @router.get("/{user_id}/auctions",response_model=List[AuctionSchema])
-def get_user_auctions(user_id:int,db:Session=Depends(get_db)):
+def get_user_auctions(user_id:int,user: UserModel = Depends(get_current_user),db:Session=Depends(get_db)):
     user=db.query(UserModel).filter(UserModel.id==user_id).first()
     if not user:
         raise HTTPException(404,"User not found")

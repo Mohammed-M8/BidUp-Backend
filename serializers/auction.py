@@ -5,6 +5,7 @@ from fastapi import File, Form, UploadFile
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.auction import AuctionStatus
+from utils.time import utcnow
 
 
 class AuctionSchema(BaseModel):
@@ -35,7 +36,7 @@ class CreateAuctionSchema(BaseModel):
     @field_validator("end_date")
     @classmethod
     def end_date_in_future(cls,v:datetime)->datetime:
-         if v<=datetime.now():
+         if v<=utcnow():
               raise ValueError("end_date must be in the future")
          return v
 
@@ -57,7 +58,7 @@ class UpdateAuctionSchema(BaseModel):
     @field_validator("end_date")
     @classmethod
     def end_date_in_future(cls,v:datetime|None)->datetime|None:
-         if v is not None and v<=datetime.now():
+         if v is not None and v<=utcnow():
               raise ValueError("end_date must be in the future")
          return v
 
