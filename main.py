@@ -7,7 +7,10 @@ load_dotenv()
 from fastapi import FastAPI
 
 # Controllers
+from controllers.auth import router as AuthRouter
 from controllers.users import router as UsersRouter
+from controllers.auctions import router as AuctionsRouter
+from controllers.bids import router as BidsRouter
 
 
 app = FastAPI()
@@ -25,8 +28,10 @@ app.add_middleware(
     allow_methods=["*"],       # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
     allow_headers=["*"],       # Allow all headers (e.g., Content-Type, Authorization)
 )
-
-app.include_router(UsersRouter, prefix='/api')
+app.include_router(AuthRouter)
+app.include_router(UsersRouter)
+app.include_router(AuctionsRouter)
+app.include_router(BidsRouter)
 
 @app.get('/health')
 def health_check():

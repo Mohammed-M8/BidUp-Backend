@@ -9,8 +9,10 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
-import os 
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 database_url = os.environ.get("DATABASE_URL")
 
 if database_url:
