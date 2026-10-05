@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Annotated, List
+from typing import Annotated
 
 from fastapi import File, Form, UploadFile
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -9,12 +9,7 @@ from serializers.category import CategorySchema
 from serializers.user import SellerSchema
 from utils.time import utcnow
 
-class PaginatedAuctionsSchema(BaseModel):
-    items: List[AuctionSchema]
-    total: int
-    page: int
-    page_size: int
-    pages: int
+
 
 class AuctionSchema(BaseModel):
     id:int

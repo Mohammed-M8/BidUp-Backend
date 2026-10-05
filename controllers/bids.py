@@ -1,6 +1,8 @@
+from math import ceil
 from typing import List
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session,joinedload
 
 from database import get_db
@@ -9,6 +11,7 @@ from models.auction import AuctionModel,AuctionStatus
 from models.bid import BidModel
 from models.user import UserModel
 from serializers.bid import BidSchema, CreateBidSchema, UserBidSchema
+from serializers.pagination import PaginatedResponse
 from utils.time import utcnow
 from websocket.manager import manager
 
@@ -21,13 +24,20 @@ def get_single(bid_id:int,db:Session=Depends(get_db)):
         raise HTTPException(404,"Bid not found")
     return bid
 
-@router.get("/auctions/{auction_id}/bids",response_model=List[BidSchema])
-def get_auction_bids(auction_id:int,user: UserModel = Depends(get_current_user),db:Session=Depends(get_db)):
+@router.get("/auctions/{auction_id}/bids",response_model=PaginatedResponse[BidSchema])
+def get_auction_bids(auction_id:int,page:int=Query(1,ge=1),page_size:int=Query(10,ge=10,le=30),user: UserModel = Depends(get_current_user),db:Session=Depends(get_db)):
     auction=db.query(AuctionModel).filter(AuctionModel.id==auction_id).first()
     if not auction:
         raise HTTPException(404,"Auction not found")
-    bids=db.query(BidModel).filter(BidModel.auction_id==auction_id).options(joinedload(BidModel.bidder)).order_by(BidModel.price.desc()).all()
-    return bids
+    total=db.query(func.count(BidModel.id)).filter(BidModel.auction_id==auction_id).scalar()
+    bids=db.query(BidModel).filter(BidModel.auction_id==auction_id).options(joinedload(BidModel.bidder)).order_by(BidModel.price.desc()).offset((page-1)*page_size).limit(page_size).all()
+    return {
+        "items":bids,
+        "total":total,
+        "page":page,
+        "page_size":page_size,
+        "pages": ceil(total / page_size) if total else 0,#type:ignore
+    }
 
 @router.get("/auctions/{auction_id}/winner", response_model=BidSchema)
 def get_winning_bid(auction_id: int, db: Session = Depends(get_db)):
@@ -91,9 +101,16 @@ def create_bid(auction_id: int, form: CreateBidSchema,background_tasks:Backgroun
 
     return bid
 
-@router.get("/users/{user_id}/bids", response_model=List[UserBidSchema])
-def get_user_bids(user_id: int, user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)):
+@router.get("/users/{user_id}/bids", response_model=PaginatedResponse[UserBidSchema])
+def get_user_bids(user_id: int,page:int=Query(1,ge=1),page_size:int=Query(10,ge=10,le=25), user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)):
     if user_id != user.id:  # type: ignore
         raise HTTPException(403, "Cannot view other users' bids")
-    return db.query(BidModel).filter(BidModel.bidder_id == user_id).options(joinedload(BidModel.auction)).order_by(BidModel.id.desc()).all()
-
+    total=db.query(func.count(BidModel.id)).filter(BidModel.bidder_id==user_id).scalar()
+    bids= db.query(BidModel).filter(BidModel.bidder_id == user_id).options(joinedload(BidModel.auction)).offset((page-1)*page_size).limit(page_size).order_by(BidModel.id.desc()).all()
+    return {
+        "items":bids,
+        "total":total,
+        "page":page,
+        "page_size":page_size,
+        "pages":ceil(total/page_size) if total else 0
+    }

@@ -4,6 +4,7 @@ from serializers.auction import AuctionSchema, AuctionSummarySchema
 from serializers.user import SellerSchema
 
 
+
 class BidBase(BaseModel):
     id: int
     price: float
@@ -22,3 +23,5 @@ class UserBidSchema(BidBase):
 
 class CreateBidSchema(BaseModel):
     price:float
+
+    

@@ -15,7 +15,8 @@ from models.auction import AuctionModel, AuctionStatus
 from models.bid import BidModel
 from models.category import CategoryModel
 from models.user import UserModel
-from serializers.auction import AuctionSchema, CancelAuctionSchema, CreateAuctionSchema, PaginatedAuctionsSchema, UpdateAuctionSchema
+from serializers.auction import AuctionSchema, CancelAuctionSchema, CreateAuctionSchema, UpdateAuctionSchema
+from serializers.pagination import PaginatedResponse
 from utils.time import utcnow
 from websocket.manager import manager
 
@@ -24,7 +25,7 @@ router=APIRouter(prefix="/api/auctions")
 CANCEL_LOCK_HOURS = 12
 
 
-@router.get("", response_model=PaginatedAuctionsSchema)
+@router.get("", response_model=PaginatedResponse[AuctionSchema])
 def get_all(category_id: int | None = None,page:int=Query(1,ge=1),page_size:int=Query(12,ge=1,le=50), db: Session = Depends(get_db)):
 
     filters=[AuctionModel.status==AuctionStatus.ACTIVE,
