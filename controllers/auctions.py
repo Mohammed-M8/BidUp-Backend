@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
 from math import ceil
+from operator import or_
 from typing import Annotated, List
 
 import cloudinary
 import cloudinary.uploader
-from sqlalchemy import func
+from sqlalchemy import func, null
 import config.cloudinary
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session,joinedload
@@ -26,13 +27,20 @@ CANCEL_LOCK_HOURS = 12
 
 
 @router.get("", response_model=PaginatedResponse[AuctionSchema])
-def get_all(category_id: int | None = None,page:int=Query(1,ge=1),page_size:int=Query(12,ge=1,le=50), db: Session = Depends(get_db)):
+def get_all(category_id: int | None = None,page:int=Query(1,ge=1),page_size:int=Query(12,ge=1,le=50),search: str | None = Query(None, min_length=1, max_length=100), db: Session = Depends(get_db)):
 
     filters=[AuctionModel.status==AuctionStatus.ACTIVE,
              AuctionModel.end_date>utcnow()]
 
     if category_id:
         filters.append(AuctionModel.category_id==category_id)
+    if search:
+        filters.append(
+            or_(
+                AuctionModel.product_name.ilike(f"%{search}%"),
+                AuctionModel.product_description.ilike(f"%{search}%")
+            )
+        )
 
     total=db.query(func.count(AuctionModel.id)).filter(*filters).scalar()
 
