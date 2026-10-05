@@ -19,6 +19,13 @@ from controllers.bids import router as BidsRouter
 from controllers.categories import router as CategoriesRouter
 from controllers.websockets import router as WebsocketsRouter
 
+
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
+
+
 @asynccontextmanager
 async def lifespan(app:FastAPI):
   task=asyncio.create_task(auction_closer())
@@ -26,6 +33,16 @@ async def lifespan(app:FastAPI):
   task.cancel()
 
 app = FastAPI(lifespan=lifespan)
+
+
+
+@app.exception_handler(OperationalError)
+async def db_unavailable(request: Request, exc: OperationalError):
+    print("Database error:", repr(exc))
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database is unavailable, please try again shortly"},
+    )
 
 # ✅ Allow your React dev server(s) to call the API
 origins = [
