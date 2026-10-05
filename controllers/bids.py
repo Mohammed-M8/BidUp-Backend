@@ -106,7 +106,7 @@ def get_user_bids(user_id: int,page:int=Query(1,ge=1),page_size:int=Query(10,ge=
     if user_id != user.id:  # type: ignore
         raise HTTPException(403, "Cannot view other users' bids")
     total=db.query(func.count(BidModel.id)).filter(BidModel.bidder_id==user_id).scalar()
-    bids= db.query(BidModel).filter(BidModel.bidder_id == user_id).options(joinedload(BidModel.auction)).offset((page-1)*page_size).limit(page_size).order_by(BidModel.id.desc()).all()
+    bids= db.query(BidModel).filter(BidModel.bidder_id == user_id).options(joinedload(BidModel.auction)).order_by(BidModel.id.desc()).offset((page-1)*page_size).limit(page_size).all()
     return {
         "items":bids,
         "total":total,
