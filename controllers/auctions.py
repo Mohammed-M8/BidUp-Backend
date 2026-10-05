@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta
+from math import ceil
 from typing import Annotated, List
 
 import cloudinary
 import cloudinary.uploader
+from sqlalchemy import func
 import config.cloudinary
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session,joinedload
 
 from database import get_db
@@ -13,7 +15,7 @@ from models.auction import AuctionModel, AuctionStatus
 from models.bid import BidModel
 from models.category import CategoryModel
 from models.user import UserModel
-from serializers.auction import AuctionSchema, CancelAuctionSchema, CreateAuctionSchema, UpdateAuctionSchema
+from serializers.auction import AuctionSchema, CancelAuctionSchema, CreateAuctionSchema, PaginatedAuctionsSchema, UpdateAuctionSchema
 from utils.time import utcnow
 from websocket.manager import manager
 
@@ -22,16 +24,34 @@ router=APIRouter(prefix="/api/auctions")
 CANCEL_LOCK_HOURS = 12
 
 
-@router.get("", response_model=List[AuctionSchema])
-def get_all(category_id: int | None = None, db: Session = Depends(get_db)):
-    query = (
+@router.get("", response_model=PaginatedAuctionsSchema)
+def get_all(category_id: int | None = None,page:int=Query(1,ge=1),page_size:int=Query(12,ge=1,le=50), db: Session = Depends(get_db)):
+
+    filters=[AuctionModel.status==AuctionStatus.ACTIVE,
+             AuctionModel.end_date>utcnow()]
+
+    if category_id:
+        filters.append(AuctionModel.category_id==category_id)
+
+    total=db.query(func.count(AuctionModel.id)).filter(*filters).scalar()
+
+    items=(
         db.query(AuctionModel)
-        .options(joinedload(AuctionModel.category))   # avoids one extra query per auction
-        .filter(AuctionModel.status == AuctionStatus.ACTIVE, AuctionModel.end_date > utcnow())
+        .options(joinedload(AuctionModel.category),joinedload(AuctionModel.seller))
+        .filter(*filters)
+        .order_by(AuctionModel.end_date.asc(),AuctionModel.id.asc())
+        .offset((page-1)*page_size)
+        .limit(page_size)
+        .all()#type:ignore
     )
-    if category_id is not None:
-        query = query.filter(AuctionModel.category_id == category_id)
-    return query.all()
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": ceil(total / page_size) if total else 0,#type:ignore
+    }
 
 @router.get("/{auction_id}",response_model=AuctionSchema)
 def get_single(auction_id:int,db:Session=Depends(get_db)):
