@@ -42,7 +42,7 @@ def get_all(category_id: int | None = None,page:int=Query(1,ge=1),page_size:int=
             )
         )
 
-    total=db.query(func.count(AuctionModel.id)).filter(*filters).scalar()
+    total=db.query(func.count(AuctionModel.id)).filter(*filters).scalar() or 0
 
     items=(
         db.query(AuctionModel)
