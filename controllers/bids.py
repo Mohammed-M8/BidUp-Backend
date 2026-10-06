@@ -114,3 +114,53 @@ def get_user_bids(user_id: int,page:int=Query(1,ge=1),page_size:int=Query(10,ge=
         "page_size":page_size,
         "pages":ceil(total/page_size) if total else 0
     }
+
+
+@router.post("/bids/{bid_id}/accept", response_model=BidSchema)
+def accept_bid(
+    bid_id: int,
+    background_tasks: BackgroundTasks,
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    bid = db.query(BidModel).filter(BidModel.id == bid_id).first()
+    if not bid:
+        raise HTTPException(404, "Bid not found")
+    
+    auction_id: int = bid.auction_id  # type: ignore
+
+    auction = (
+        db.query(AuctionModel)
+        .filter(AuctionModel.id == bid.auction_id)
+        .with_for_update()
+        .first()
+    )
+
+    if auction.seller_id != user.id:  # type: ignore
+        raise HTTPException(403, "Only the seller can accept a bid")
+    if auction.status != AuctionStatus.ACTIVE or auction.end_date <= utcnow():  # type: ignore
+        raise HTTPException(409, "Auction is not active")
+
+    top_bid = (
+        db.query(BidModel)
+        .filter(BidModel.auction_id == auction.id)#type:ignore
+        .order_by(BidModel.price.desc(), BidModel.id.asc())
+        .first()
+    )
+    if top_bid.id != bid.id:  # type: ignore
+        raise HTTPException(409, "Only the highest bid can be accepted")
+
+    auction.status = AuctionStatus.ENDED  # type: ignore
+    auction.ended_at = utcnow()  # type: ignore
+    db.commit()
+    db.refresh(bid)
+
+    background_tasks.add_task(manager.broadcast, auction_id, {
+        "type": "bid_accepted",
+        "bid_id": bid.id,
+        "price": bid.price,
+        "bidder": {"id": bid.bidder_id, "username": bid.bidder.username},
+    })
+    background_tasks.add_task(manager.close_room, auction_id)
+
+    return bid
