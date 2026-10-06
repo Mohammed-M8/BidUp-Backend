@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from models.auction import AuctionModel
+from models.auction import AuctionModel, AuctionStatus
 from models.user import UserModel
 from serializers.auction import AuctionSchema
 from serializers.pagination import PaginatedResponse
@@ -25,17 +25,21 @@ def current_user(user: UserSchema = Depends(get_current_user)):
 def get_user_auctions(
     user_id: int,
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=10, le=30),
+    page_size: int = Query(10, ge=10, le=30),status:AuctionStatus|None=Query(None),
     db: Session = Depends(get_db)):
-    total = (
-        db.query(func.count(AuctionModel.id))
-        .filter(AuctionModel.seller_id == user_id)
-        .scalar()
-    )
+
+    query = (
+    db.query(AuctionModel)
+    .filter(AuctionModel.seller_id == user_id)
+)
+
+    if status is not None:
+        query = query.filter(AuctionModel.status == status)
+
+    total = query.count()
 
     auctions = (
-        db.query(AuctionModel)
-        .filter(AuctionModel.seller_id == user_id)
+        query
         .order_by(AuctionModel.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)

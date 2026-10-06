@@ -21,6 +21,9 @@ from controllers.websockets import router as WebsocketsRouter
 
 
 
+
+
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
@@ -63,6 +66,7 @@ app.include_router(AuctionsRouter)
 app.include_router(BidsRouter)
 app.include_router(CategoriesRouter)
 app.include_router(WebsocketsRouter)
+
 
 @app.get('/health')
 def health_check():

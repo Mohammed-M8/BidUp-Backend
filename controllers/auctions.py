@@ -69,24 +69,40 @@ def get_single(auction_id:int,db:Session=Depends(get_db)):
         raise HTTPException(404,"Auction not found")
     return auction
 
-@router.post("",response_model=AuctionSchema,status_code=201)
-def create(form:CreateAuctionSchema=Depends(),user:UserModel=Depends(get_current_user),db:Session=Depends(get_db)):
+@router.post("", response_model=AuctionSchema, status_code=201)
+def create(
+    image: Annotated[UploadFile, File()],
+    form: CreateAuctionSchema = Depends(CreateAuctionSchema.as_form),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     if form.category_id is not None:
         exists = db.query(CategoryModel.id).filter(CategoryModel.id == form.category_id).first()
         if not exists:
             raise HTTPException(422, "Category does not exist")
-    starting_price=form.starting_price
-    result=cloudinary.uploader.upload(form.image.file,folder="bidup/auctions")
-    image_url=result["secure_url"]
-    image_public_id=result["public_id"]
-    new_auction=AuctionModel(**form.model_dump(exclude={"image"}),current_price=starting_price,image_url=image_url,image_public_id=image_public_id,seller_id=user.id)
+
+    result = cloudinary.uploader.upload(image.file, folder="bidup/auctions")
+
+    new_auction = AuctionModel(
+        **form.model_dump(),
+        current_price=form.starting_price,
+        image_url=result["secure_url"],
+        image_public_id=result["public_id"],
+        seller_id=user.id,
+    )
     db.add(new_auction)
     db.commit()
     db.refresh(new_auction)
     return new_auction
 
-@router.put("/{auction_id}",response_model=AuctionSchema)
-def update(auction_id:int,update_form:UpdateAuctionSchema=Depends(),user:UserModel=Depends(get_current_user),db:Session=Depends(get_db)):
+@router.put("/{auction_id}", response_model=AuctionSchema)
+def update(
+    auction_id: int,
+    image: Annotated[UploadFile | None, File()] = None,
+    update_form: UpdateAuctionSchema = Depends(UpdateAuctionSchema.as_form),
+    user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     auction=db.query(AuctionModel).filter(AuctionModel.id==auction_id).first()
     if not auction:
         raise HTTPException(404,"Auction not found")
@@ -110,9 +126,8 @@ def update(auction_id:int,update_form:UpdateAuctionSchema=Depends(),user:UserMod
             "Can't edit an auction after bids have been placed. Cancel it and relist instead",
         )
 
-    update_data = update_form.model_dump(
-        exclude_none=True,
-        exclude={"image"})
+    update_data = update_form.model_dump(exclude_none=True)
+
     category_id = update_data.get("category_id")
     if category_id is not None:
         exists = db.query(CategoryModel.id).filter(CategoryModel.id == category_id).first()
@@ -128,11 +143,14 @@ def update(auction_id:int,update_form:UpdateAuctionSchema=Depends(),user:UserMod
     for key,value in update_data.items():
         setattr(auction,key,value)
 
-    if update_form.image:
-        result = cloudinary.uploader.upload(
-            update_form.image.file,
+
+    if image:
+        cloudinary.uploader.upload(
+            image.file,
             public_id=auction.image_public_id,
-            overwrite=True)
+            overwrite=True,
+            invalidate=True,
+        )
 
         db.commit()
         db.refresh(auction)
