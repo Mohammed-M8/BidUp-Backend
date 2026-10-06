@@ -138,7 +138,7 @@ def update(
 
     new_buy_now = update_data.get("buy_now_price")
     if new_buy_now is not None and new_buy_now <= auction.starting_price:  # type: ignore
-        raise HTTPException(422, "buy_now_price must be greater than starting_price")
+        raise HTTPException(422, "buy now price must be greater than starting price")
 
     for key,value in update_data.items():
         setattr(auction,key,value)

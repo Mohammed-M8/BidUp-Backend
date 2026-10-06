@@ -102,11 +102,39 @@ def create_bid(auction_id: int, form: CreateBidSchema,background_tasks:Backgroun
     return bid
 
 @router.get("/users/{user_id}/bids", response_model=PaginatedResponse[UserBidSchema])
-def get_user_bids(user_id: int,page:int=Query(1,ge=1),page_size:int=Query(10,ge=10,le=25), user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_user_bids(user_id: int,page:int=Query(1,ge=1),page_size:int=Query(10,ge=10,le=25),status:str|None=Query(None), user: UserModel = Depends(get_current_user), db: Session = Depends(get_db)):
     if user_id != user.id:  # type: ignore
         raise HTTPException(403, "Cannot view other users' bids")
-    total=db.query(func.count(BidModel.id)).filter(BidModel.bidder_id==user_id).scalar()
-    bids= db.query(BidModel).filter(BidModel.bidder_id == user_id).options(joinedload(BidModel.auction)).order_by(BidModel.id.desc()).offset((page-1)*page_size).limit(page_size).all()
+
+    
+    query = (
+        db.query(BidModel)
+        .join(BidModel.auction)
+        .filter(BidModel.bidder_id == user_id)
+    )
+
+    if status == "won":
+        query = query.filter(
+            AuctionModel.status == AuctionStatus.ENDED,
+            BidModel.price == AuctionModel.current_price,
+        )
+
+    elif status == "lost":
+        query = query.filter(
+            AuctionModel.status == AuctionStatus.ENDED,
+            BidModel.price < AuctionModel.current_price,
+        )
+
+    total = query.count()
+
+    bids = (
+        query
+        .options(joinedload(BidModel.auction))
+        .order_by(BidModel.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     return {
         "items":bids,
         "total":total,
