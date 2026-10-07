@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, computed_field
@@ -20,6 +21,7 @@ class BidBase(BaseModel):
     price: float
     bidder_id: int
     auction_id: int
+    created_at: datetime
 
     class Config():
         orm_mode=True
