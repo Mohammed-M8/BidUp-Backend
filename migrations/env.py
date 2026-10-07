@@ -16,10 +16,12 @@ load_dotenv()
 database_url = os.environ.get("DATABASE_URL")
 
 if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
-else: 
+    config.set_main_option(
+        "sqlalchemy.url",
+        database_url.replace("%", "%%"),
+    )
+else:
     raise ValueError("DATABASE_URL environment variable is required")
-
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
