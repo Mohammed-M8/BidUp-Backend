@@ -7,7 +7,8 @@ from models.base import BaseModel
 class AuctionStatus(str, enum.Enum):
     ACTIVE = "active"
     ENDED = "ended"
-    CANCELLED = "cancelled" 
+    SOLD = "sold"
+    CANCELLED = "cancelled"
 
 class AuctionModel(BaseModel):
     __tablename__="auctions"

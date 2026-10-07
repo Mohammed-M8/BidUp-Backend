@@ -2,7 +2,7 @@ from math import ceil
 from typing import List
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session,joinedload
 
 from database import get_db
@@ -47,17 +47,16 @@ def get_winning_bid(auction_id: int, db: Session = Depends(get_db)):
 
     if auction.status == AuctionStatus.CANCELLED:#type:ignore
         raise HTTPException(409, "Auction was cancelled, so there is no winner")
-    has_ended: bool = auction.status == AuctionStatus.ENDED or auction.end_date <= utcnow()  # type: ignore
-    if not has_ended:
+    if auction.status == AuctionStatus.ACTIVE and auction.end_date > utcnow():  # type: ignore
         raise HTTPException(409, "Auction is still running")
+    if auction.status != AuctionStatus.SOLD:  # type: ignore
+        raise HTTPException(404, "Auction ended without a sale")
     winning_bid = (
         db.query(BidModel)
         .filter(BidModel.auction_id == auction_id)
         .order_by(BidModel.price.desc(), BidModel.id.asc()).options(joinedload(BidModel.bidder))
         .first()
     )
-    if not winning_bid:
-        raise HTTPException(404, "Auction ended with no bids")
 
     return winning_bid
 
@@ -81,7 +80,7 @@ def create_bid(auction_id: int, form: CreateBidSchema,background_tasks:Backgroun
     ended = False
     if auction.buy_now_price is not None and price >= auction.buy_now_price:  # type: ignore
         price = auction.buy_now_price  # type: ignore
-        auction.status = AuctionStatus.ENDED  # type: ignore
+        auction.status = AuctionStatus.SOLD  # type: ignore
         auction.ended_at = utcnow()#type:ignore 
         ended=True
 
@@ -115,14 +114,19 @@ def get_user_bids(user_id: int,page:int=Query(1,ge=1),page_size:int=Query(10,ge=
 
     if status == "won":
         query = query.filter(
-            AuctionModel.status == AuctionStatus.ENDED,
+            AuctionModel.status == AuctionStatus.SOLD,
             BidModel.price == AuctionModel.current_price,
         )
 
     elif status == "lost":
         query = query.filter(
-            AuctionModel.status == AuctionStatus.ENDED,
-            BidModel.price < AuctionModel.current_price,
+            or_(
+                AuctionModel.status == AuctionStatus.ENDED,
+                and_(
+                    AuctionModel.status == AuctionStatus.SOLD,
+                    BidModel.price < AuctionModel.current_price,
+                ),
+            )
         )
 
     total = query.count()
@@ -178,7 +182,7 @@ def accept_bid(
     if top_bid.id != bid.id:  # type: ignore
         raise HTTPException(409, "Only the highest bid can be accepted")
 
-    auction.status = AuctionStatus.ENDED  # type: ignore
+    auction.status = AuctionStatus.SOLD  # type: ignore
     auction.ended_at = utcnow()  # type: ignore
     db.commit()
     db.refresh(bid)

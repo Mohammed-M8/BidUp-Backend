@@ -32,6 +32,7 @@ class BidSchema(BidBase):
 
 class UserBidSchema(BidBase):
     auction: AuctionSummarySchema
+
     @computed_field
     @property
     def status(self) -> BidStatus:
@@ -41,12 +42,16 @@ class UserBidSchema(BidBase):
             return BidStatus.CANCELLED
 
         is_top_bid = self.price >= auction.current_price
-        is_over = auction.status == AuctionStatus.ENDED or auction.end_date <= utcnow()
+        is_over = (
+            auction.status in (AuctionStatus.ENDED, AuctionStatus.SOLD)
+            or auction.end_date <= utcnow()
+        )
 
         if is_over:
-            return BidStatus.WON if is_top_bid else BidStatus.LOST
+            if auction.status == AuctionStatus.SOLD and is_top_bid:
+                return BidStatus.WON
+            return BidStatus.LOST
         return BidStatus.LEADING if is_top_bid else BidStatus.OUTBID
-
 class CreateBidSchema(BaseModel):
     price:float
 

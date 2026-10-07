@@ -1,11 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from math import ceil
-from operator import or_
-from typing import Annotated, List
+from typing import Annotated
 
 import cloudinary
 import cloudinary.uploader
-from sqlalchemy import func, null
+from sqlalchemy import func,or_
 import config.cloudinary
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session,joinedload
@@ -39,7 +38,7 @@ def get_all(category_id: int | None = None,page:int=Query(1,ge=1),page_size:int=
             or_(
                 AuctionModel.product_name.ilike(f"%{search}%"),
                 AuctionModel.product_description.ilike(f"%{search}%")
-            )
+            )#type:ignore
         )
 
     total=db.query(func.count(AuctionModel.id)).filter(*filters).scalar() or 0
@@ -103,7 +102,12 @@ def update(
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    auction=db.query(AuctionModel).filter(AuctionModel.id==auction_id).first()
+    auction = (
+        db.query(AuctionModel)
+        .filter(AuctionModel.id == auction_id)
+        .with_for_update()
+        .first()
+    )    
     if not auction:
         raise HTTPException(404,"Auction not found")
 
@@ -133,8 +137,7 @@ def update(
         exists = db.query(CategoryModel.id).filter(CategoryModel.id == category_id).first()
         if not exists:
             raise HTTPException(422, "Category does not exist")
-    if "end_date" in update_data and auction.bids:
-        raise HTTPException(409, "Can't change the end date after bids have been placed")
+
 
     new_buy_now = update_data.get("buy_now_price")
     if new_buy_now is not None and new_buy_now <= auction.starting_price:  # type: ignore
@@ -169,16 +172,20 @@ def delete(
     user: UserModel = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    auction = db.query(AuctionModel).filter(AuctionModel.id == auction_id).first()
+    auction = (
+        db.query(AuctionModel)
+        .filter(AuctionModel.id == auction_id)
+        .with_for_update()
+        .first()
+    )    
     if not auction:
         raise HTTPException(404, "Auction not found")
 
     if auction.seller_id != user.id:  # type: ignore
         raise HTTPException(403, "Cannot delete other's auctions")
 
-    if auction.status != AuctionStatus.ACTIVE:  # type: ignore
-        raise HTTPException(409, "Auction is already ended or cancelled")
-
+    if auction.status != AuctionStatus.ACTIVE or auction.end_date <= utcnow():  # type: ignore
+        raise HTTPException(409, "Only active auctions can be cancelled")
     if auction.bids:
         time_left = auction.end_date - utcnow()  # type: ignore
         if time_left < timedelta(hours=CANCEL_LOCK_HOURS):#type:ignore
