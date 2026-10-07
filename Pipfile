@@ -15,6 +15,7 @@ pyjwt = "*"
 alembic = "*"
 pydantic = {extras = ["email"], version = "*"}
 cloudinary = "*"
+python-multipart = "*"
 
 [dev-packages]
 
